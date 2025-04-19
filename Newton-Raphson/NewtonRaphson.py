@@ -2,6 +2,8 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import sympy as sp
+import time
+
 
 # ==============================
 # CONSTANTES FÍSICAS (Simbólicas)
@@ -51,7 +53,6 @@ def df_planck(lambda_, T_val):
 # ==============================
 # MÉTODO NEWTON-RAPHSON
 # ==============================
-
 def newton_raphson(f, df, x0, tol, iter_max):
     """
     Método de Newton-Raphson para encontrar raíces de funciones no lineales.
@@ -84,7 +85,7 @@ def newton_raphson(f, df, x0, tol, iter_max):
 
 def buscar_solucion_newton(T_val, I0, x0, tol=1e-12, iter_max=100):
     """
-    Busca una λ tal que B(λ, T) = I0 usando el método de Newton-Raphson.
+    Busca una λ tal que B(λ, T) - I0 = 0 usando el método de Newton-Raphson.
     """
     f_nr = lambda l: planck_law(l, T_val) - I0
     df_nr = lambda l: df_planck(l, T_val)
@@ -92,13 +93,10 @@ def buscar_solucion_newton(T_val, I0, x0, tol=1e-12, iter_max=100):
     lambda_sol, k, err = newton_raphson(f_nr, df_nr, x0, tol, iter_max)
     return lambda_sol, k, err
 
-# ==============================
-# MÉTODO PARA EL GRÁFICO Y VISUALIZACIÓN
-# ==============================
 
 def graficar_planck(T_val, a, b, I0=None, soluciones=None, historial=None):
     """
-    Grafica B(λ, T) con opciones para mostrar:
+    Grafica B(λ, T) muestra:
       - Intensidad objetivo (I0)
       - Soluciones encontradas
       - Proceso de convergencia
@@ -140,7 +138,9 @@ def graficar_planck(T_val, a, b, I0=None, soluciones=None, historial=None):
     return max_I, lambda_peak
 
 def find_peak_wavelength(T_val):
-    """Estimación inicial usando la ley de Wien."""
+    """
+    Estimación inicial usando la ley de Wien.
+    """
     return 2.897e-3 / T_val if T_val > 0 else 500e-9
 
 # ==============================
@@ -148,9 +148,9 @@ def find_peak_wavelength(T_val):
 # ==============================
 if __name__ == "__main__":
     # Configuración
-    T_val = 5000            # Temperatura en Kelvin
-    a = 100e-9              # Límite inferior (100 nm)
-    b = 3000e-9             # Límite superior (3000 nm)
+    T_val = 1337.58         # Temperatura en Kelvin
+    a = 900e-9              # Límite inferior 
+    b = 10000e-9             # Límite superior 
     I0_percent = 0.5        # Porcentaje de la intensidad máxima a buscar
     
     print("\n" + "="*50)
@@ -171,37 +171,52 @@ if __name__ == "__main__":
     soluciones = []
     iteraciones = []
     
-    # Lado izquierdo del pico: usamos un x0 razonable, por ejemplo 'a'
+    # Lado izquierdo
     try:
         print("\nBuscando solución antes del pico (Newton-Raphson):")
-        lambda_left, k_left, err_left = buscar_solucion_newton(T_val, I0, x0=400e-9)
+        x0_izq = 1400e-9
+        start_izq = time.time()
+        lambda_left, k_left, err_left = buscar_solucion_newton(T_val, I0, x0=x0_izq)
+        end_izq = time.time()
         soluciones.append(lambda_left)
         iteraciones.append((k_left, err_left))
-        print(f"λ (antes del pico): {lambda_left*1e9:.2f} nm")
-        print(f"Iteraciones: {k_left}, Error: {err_left:.2e}")
+        print(f"  Método: Newton-Raphson")
+        print(f"  Valor inicial: {x0_izq*1e9:.2f} nm")
+        print(f"  λ encontrado: {lambda_left*1e9:.2f} nm")
+        print(f"  Iteraciones: {k_left}")
+        print(f"  Error: {err_left:.2e}")
+        print(f"  Tiempo de ejecución: {end_izq - start_izq:.2e} segundos")
     except Exception as e:
         soluciones.append(None)
         iteraciones.append(None)
         print(f"Error en lado izquierdo: {str(e)}")
-    
-    # Lado derecho del pico: usamos un x0 razonable, por ejemplo 'b'
+
+    # Lado derecho
     try:
         print("\nBuscando solución después del pico (Newton-Raphson):")
-        lambda_right, k_right, err_right = buscar_solucion_newton(T_val, I0, x0=800e-9)
+        x0_der = 2600e-9
+        start_der = time.time()
+        lambda_right, k_right, err_right = buscar_solucion_newton(T_val, I0, x0=x0_der)
+        end_der = time.time()
         soluciones.append(lambda_right)
         iteraciones.append((k_right, err_right))
-        print(f"λ (después del pico): {lambda_right*1e9:.2f} nm")
-        print(f"Iteraciones: {k_right}, Error: {err_right:.2e}")
+        print(f"  Método: Newton-Raphson")
+        print(f"  Valor inicial: {x0_der*1e9:.2f} nm")
+        print(f"  λ encontrado: {lambda_right*1e9:.2f} nm")
+        print(f"  Iteraciones: {k_right}")
+        print(f"  Error: {err_right:.2e}")
+        print(f"  Tiempo de ejecución: {end_der - start_der:.2e} segundos")
     except Exception as e:
         soluciones.append(None)
         iteraciones.append(None)
         print(f"Error en lado derecho: {str(e)}")
+
     
     # Paso 4: Graficar con las soluciones encontradas
     print("\nMostrando gráfico con soluciones...")
     graficar_planck(T_val, a, b, I0, soluciones)
     
-    # Opcional: Mostrar convergencia para una de las soluciones
+    # Mostrar convergencia para una de las soluciones
     if soluciones[0] is not None:
         print("\nProceso de convergencia (lado izquierdo):")
         graficar_planck(T_val, a, b, I0, [soluciones[0]])
