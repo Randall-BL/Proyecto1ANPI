@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 # ==============================
 # CONSTANTES FÍSICAS
@@ -17,7 +18,6 @@ def planck_law(lambd, T):
     """
     Calcula la intensidad espectral de la radiación emitida por un cuerpo negro 
     a una temperatura T según la ley de Planck.
-    
     """
     a = 2.0 * h * c**2
     b = h * c / (lambd * k * T)
@@ -28,50 +28,75 @@ def planck_law(lambd, T):
 # ==============================
 
 def buscar_solucion_IQI(T, I0, x0, x1, x2, tol=1e-9, max_iter=100):
-    historial = []
-
     """
-    Aplica el método de Interpolación Cuadrática Inversa (IQI) para encontrar 
-    una longitud de onda λ tal que la ley de Planck a temperatura T sea igual a una intensidad I0.
-    Este método es útil para encontrar raíces de funciones no lineales sin derivadas,
-    utilizando tres estimaciones iniciales y ajustando mediante interpolación racional inversa.
-
+    Método: Interpolación Cuadrática Inversa (IQI)
+    
     Parámetros
     ----------
-    T :          Temperatura en kelvin (K).
-    I0 :         Intensidad objetivo a alcanzar mediante la ley de Planck.
-    x0, x1, x2 : Tres estimaciones iniciales para la longitud de onda λ (en metros).
-    tol :        Tolerancia absoluta para la convergencia. Por defecto establecido en 1e-9.
-    max_iter :   Número máximo de iteraciones permitidas.
-
+    T     :     Temperatura en kelvin (K).
+    I0    :     Intensidad objetivo a alcanzar.
+    x0,x1,x2 :  Tres valores iniciales para longitud de onda (λ).
+    tol   :     Tolerancia para criterio de parada.
+    max_iter :  Número máximo de iteraciones.
+    
+    Retorna
+    -------
+    xk :    Aproximación final.
+    k  :    Número de iteraciones realizadas.
+    ek :    Error en la solución.
     """
-    
+    # Registrar tiempo del IQI
+    import time
+    inicio = time.time()
+
+    historial = []
     def f(lambd): return planck_law(lambd, T) - I0
-    
+
+    print("\n>> MÉTODO: Interpolación Cuadrática Inversa (IQI)")
+    print(f"   Valores iniciales: x0 = {x0:.2e}, x1 = {x1:.2e}, x2 = {x2:.2e}")
+
+    # Bucle principal para el IQI
     for k in range(max_iter):
+
+        # Asignación de Valores del método
         f0, f1, f2 = f(x0), f(x1), f(x2)
-        
+
+        # Condición de parada 1.
         if f0 == f1 or f1 == f2 or f0 == f2:
             raise ValueError("Valores f repetidos; IQI no puede continuar.")
-        
-        # Interpolación cuadrática inversa
+
+        # Definición de la Interpolación de Lagrange inversa de segundo orden
         L0 = f1 * f2 / ((f0 - f1) * (f0 - f2))
         L1 = f0 * f2 / ((f1 - f0) * (f1 - f2))
         L2 = f0 * f1 / ((f2 - f0) * (f2 - f1))
-        x3 = x0 * L0 + x1 * L1 + x2 * L2
 
+        # Aproximación de la raíz obtenida en cada iteración
+        x3 = x0 * L0 + x1 * L1 + x2 * L2
         historial.append((k, x3, f(x3)))
 
-        if abs(f(x3)) < tol:
-            return x3, k + 1, abs(f(x3)), historial
+        # Definicion y cálculo del Error 
+        ek = max(abs(f(x3)), abs(x3 - x2))
 
+        # Condición de parada 2.
+        if ek < tol:
+            tiempo = time.time() - inicio
+            print(f"   Iteraciones realizadas: {k + 1}")
+            print(f"   Aproximación final xk: {x3:.6e}")
+            print(f"   Error final ek: {ek:.2e}")
+            print(f"   Tiempo de ejecución: {tiempo:.6f} segundos")
+            return x3, k + 1, ek, historial
+
+        # Actualizar los valores del método en cada iteración
         x0, x1, x2 = x1, x2, x3
 
+    # Condición de parada 3.
     raise Exception("No se alcanzó la convergencia.")
 
 # ==============================
 # GRAFICAR PLANCK + CONVERGENCIA
 # ==============================
+
+# Funcion principal para graficar el IQI
 
 def graficar_planck(T_val, a, b, I0=None, soluciones=None, historial=None):
     lambdas = np.linspace(a, b, 1000)
@@ -115,10 +140,12 @@ def find_peak_wavelength(T_val):
 # ==============================
 
 if __name__ == "__main__":
-    T_val = 5000
-    a = 100e-9
-    b = 3000e-9
-    I0_percent = 0.5
+
+    # Parámetros tomados por el IQI
+    T_val = 1337  
+    a = 400e-9    
+    b = 5000e-9
+    I0_percent = 0.5  
 
     print("="*50)
     print(f" ANÁLISIS CON INTERPOLACIÓN CUADRÁTICA INVERSA (IQI)")
@@ -134,24 +161,22 @@ if __name__ == "__main__":
 
     soluciones = []
 
-    # Solución izquierda (antes del pico)
+    # Solución del método por la izquierda
     try:
         print("Buscando λ izquierda (IQI)...")
         left_guess = [a, (a + lambda_peak) / 2, lambda_peak * 0.95]
         lambda_left, it_left, err_left, hist_left = buscar_solucion_IQI(T_val, I0, *left_guess)
-        print(f"λ izquierda: {lambda_left*1e9:.2f} nm - Iteraciones: {it_left}, Error: {err_left:.2e}")
         soluciones.append(lambda_left)
         graficar_planck(T_val, a, b, I0, [lambda_left], hist_left)
     except Exception as e:
         print(f"Error IQI izquierda: {e}")
         soluciones.append(None)
 
-    # Solución derecha (después del pico)
+    # Solución del método por la derecha
     try:
         print("\nBuscando λ derecha (IQI)...")
-        right_guess = [lambda_peak * 1.05, lambda_peak * 1.2, lambda_peak * 1.5]
+        right_guess = [lambda_peak * 1.05, lambda_peak * 1.3, lambda_peak * 1.7]
         lambda_right, it_right, err_right, hist_right = buscar_solucion_IQI(T_val, I0, *right_guess)
-        print(f"λ derecha: {lambda_right*1e9:.2f} nm - Iteraciones: {it_right}, Error: {err_right:.2e}")
         soluciones.append(lambda_right)
         graficar_planck(T_val, a, b, I0, [lambda_right], hist_right)
     except Exception as e:
