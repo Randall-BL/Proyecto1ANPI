@@ -1,206 +1,146 @@
-import math
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+import time
 
-# ==============================
-# CONSTANTES FÍSICAS
-# ==============================
+# Constantes físicas
+h = 6.62607015e-34      # constante de Planck [J·s]
+c = 299792458           # velocidad de la luz [m/s]
+k = 1.380649e-23        # constante de Boltzmann [J/K]
 
-h = 6.626e-34       # Constante de Planck (J·s)
-c = 3.00e8          # Velocidad de la luz (m/s)
-k = 1.381e-23       # Constante de Boltzmann (J/K)
+# Ley de Planck
+def planck(wavelength, T):
+    a = 2.0*h*c**2
+    b = h*c / (wavelength*k*T)
+    intensity = a / (wavelength**5 * (np.exp(b) - 1.0))
+    return intensity
 
-# ==============================
-# FUNCIONES DE PLANCK (MEJORADAS)
-# ==============================
+# Derivada numérica de orden 1 y 2
+def first_derivative(f, x, h=1e-10, *args):
+    return (f(x + h, *args) - f(x - h, *args)) / (2 * h)
 
-def planck_law(lambda_, T):
-    """Ley de radiación de Planck para una longitud de onda lambda (m) y temperatura T (K)."""
-    # Versión numéricamente más estable
-    if lambda_ <= 0:
-        return 0.0
-    
-    x = (h * c) / (lambda_ * k * T)
-    if x > 700:  # Para evitar overflow en exp(x)
-        return 0.0
-    
-    exp_x = math.exp(x)
-    numerator = 2 * h * c**2
-    denominator = (lambda_**5) * (exp_x - 1)
-    return numerator / denominator
+def second_derivative(f, x, h=1e-10, *args):
+    return (f(x + h, *args) - 2 * f(x, *args) + f(x - h, *args)) / (h**2)
 
-def planck_law_derivative(lambda_, T):
-    """Derivada de la ley de Planck con respecto a lambda (versión estable)."""
-    if lambda_ <= 0:
-        return 0.0
-    
-    x = (h * c) / (lambda_ * k * T)
-    if x > 700:
-        return 0.0
-    
-    exp_x = math.exp(x)
-    term1 = -5 / lambda_ + (x / lambda_) * (exp_x / (exp_x - 1))
-    return planck_law(lambda_, T) * term1
+# Método de Kung-Traub
+def kung_traub(f, x0, tol=1e-8, max_iter=100, *args):
+    x_values = [x0]
+    start_time = time.time()
 
-def f(lambda_, T, I0):
-    """Función objetivo para encontrar raíces."""
-    return planck_law(lambda_, T) - I0
+    for k in range(1, max_iter + 1):
+        f_xk = f(x_values[-1], *args)
+        f1_xk = first_derivative(f, x_values[-1], 1e-10, *args)
+        f2_xk = second_derivative(f, x_values[-1], 1e-10, *args)
 
-def df(lambda_, T):
-    """Derivada de la función objetivo."""
-    return planck_law_derivative(lambda_, T)
+        if f1_xk == 0:
+            break
 
-# ==============================
-# MÉTODO DE KUNG-TRAUB (MEJORADO)
-# ==============================
+        z = x_values[-1] - f_xk / f1_xk
+        f_z = f(z, *args)
+        y = x_values[-1] - (f_xk**2) / (f1_xk * (f_xk - 2*f_z))
+        f_y = f(y, *args)
+        denominator = f1_xk * (f_xk - 2*f_z)
 
-def kung_traub(T, I0, lambda0, tol=1e-8, max_iter=100):
-    """
-    Implementación mejorada del método de Kung-Traub con:
-    - Mejor manejo de casos especiales
-    - Verificación de convergencia dual
-    - Punto de partida inteligente
-    """
-    x = lambda0
-    best_x = x
-    best_residual = abs(f(x, T, I0))
-    
-    for i in range(max_iter):
-        try:
-            fx = f(x, T, I0)
-            dfx = df(x, T)
-            
-            # Verificar convergencia
-            if abs(fx) < tol:
-                return x
-                
-            if dfx == 0:
-                # Intento recuperar con pequeño paso
-                x = x * (1 + 1e-4)
-                continue
-            
-            # Paso 1: Newton step
-            y = x - fx / dfx
-            fy = f(y, T, I0)
-            
-            # Paso 2: Segundo paso
-            denom_y = fx - 2 * fy
-            if denom_y == 0:
-                # Si falla, usar solo paso de Newton
-                x_next = y
-            else:
-                z = y - (fy / fx) * (fx / denom_y)
-                fz = f(z, T, I0)
-                
-                # Paso 3: Tercer paso
-                denom_z = (fx - 2 * fy)**2
-                if denom_z == 0:
-                    x_next = z
-                else:
-                    x_next = z - (fz / fx) * ((fx**2) / denom_z)
-            
-            # Actualizar mejor solución encontrada
-            current_residual = abs(f(x_next, T, I0))
-            if current_residual < best_residual:
-                best_residual = current_residual
-                best_x = x_next
-            
-            # Criterios de parada
-            if abs(x_next - x) < tol or current_residual < tol:
-                return x_next
-                
-            x = x_next
-            
-        except (OverflowError, ValueError):
-            # Si hay problemas numéricos, ajustar el paso
-            x = x * (1 + 1e-4)
-    
-    # Si no converge, devolver la mejor solución encontrada
-    print(f"Advertencia: No se alcanzó la tolerancia en {max_iter} iteraciones. Mejor residual: {best_residual:.2e}")
-    return best_x
+        if denominator == 0:
+            break
 
-# ==============================
-# FUNCIONES AUXILIARES
-# ==============================
+        x_next = x_values[-1] - (f_xk**3) / (denominator * (f_xk - 2*f_y))
+        x_values.append(x_next)
 
-def find_peak_wavelength(T):
-    """Ley del desplazamiento de Wien para estimar el pico."""
-    return 2.897e-3 / T if T > 0 else 1e-9
+        error = max(abs(f(x_next, *args)), abs(x_next - x_values[-2]))
+        if error < tol:
+            end_time = time.time()
+            return {
+                'xk': x_next,
+                'error': error,
+                'iteraciones': k,
+                'tiempo': end_time - start_time,
+                'lambda0': x0
+            }
 
-def graficar_planck(T, a, b):
-    """Grafica la curva de Planck y devuelve el máximo."""
-    lambdas = np.linspace(a, b, 1000)
-    intensities = np.array([planck_law(l, T) for l in lambdas])
-    max_I = np.max(intensities)
-    lambda_peak = lambdas[np.argmax(intensities)]
+    end_time = time.time()
+    return {
+        'xk': x_values[-1],
+        'error': max(abs(f(x_values[-1], *args)), abs(x_values[-1] - x_values[-2])),
+        'iteraciones': max_iter,
+        'tiempo': end_time - start_time,
+        'lambda0': x0
+    }
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(lambdas * 1e9, intensities, label=f'T = {T} K')
-    plt.title(f"Primera grafica de Radiación de Planck a T = {T} K")
-    plt.xlabel("Longitud de onda (nm)")
-    plt.ylabel("Intensidad espectral (W·sr⁻¹·m⁻³)")
-    plt.grid(True)
-    plt.legend()
-    plt.show()
+# Función objetivo para encontrar longitud de onda tal que I(λ) = I0
+def f(lmbda, T, I0):
+    return planck(lmbda, T) - I0
 
-    return max_I, lambda_peak
+# Rango de análisis
+T = 1337  # temperatura en Kelvin
+wavelengths = np.linspace(100e-9, 3000e-9, 1000)  # 100 a 3000 nm
 
-# ==============================
-# PROGRAMA PRINCIPAL
-# ==============================
+print(f"\n Usando Kung-Traub para analizar radiación a T = {T} K en rango 100-3000 nm")
 
-if __name__ == "__main__":
-    # Configuración
-    T = 5000  # Temperatura en Kelvin
-    a, b = 100e-9, 3000e-9  # Rango de longitudes de onda (100 nm a 3000 nm)
-    I0_percent = 0.5  # Porcentaje de la intensidad máxima a buscar
-    
-    # Paso 1: Graficar y encontrar máximo
-    print(f"\nAnalizando radiación a T = {T} K en rango {a*1e9:.0f}-{b*1e9:.0f} nm")
-    max_I, lambda_peak = graficar_planck(T, a, b)
-    print(f"Intensidad máxima: {max_I:.3e} W·sr⁻¹·m⁻³")
-    print(f"Longitud de onda pico (teórica): {find_peak_wavelength(T)*1e9:.2f} nm")
-    print(f"Longitud de onda pico (calculada): {lambda_peak*1e9:.2f} nm")
-    
-    # Paso 2: Buscar longitudes de onda para intensidad dada
-    I0 = max_I * I0_percent
-    print(f"\nBuscando λ para I0 = {I0_percent:.0%} del máximo ({I0:.3e} W·sr⁻¹·m⁻³)")
-    
-    # Puntos iniciales inteligentes (izquierda y derecha del pico)
-    initial_left = lambda_peak * 0.6
-    initial_right = lambda_peak * 1.5
-    
-    # Búsqueda de soluciones
-    try:
-        lambda_left = kung_traub(T, I0, initial_left)
-        print(f"λ (antes del pico): {lambda_left*1e9:.2f} nm → I = {planck_law(lambda_left, T):.3e}")
-    except Exception as e:
-        print(f"Error en lado izquierdo: {str(e)}")
-        lambda_left = None
-    
-    try:
-        lambda_right = kung_traub(T, I0, initial_right)
-        print(f"λ (después del pico): {lambda_right*1e9:.2f} nm → I = {planck_law(lambda_right, T):.3e}")
-    except Exception as e:
-        print(f"Error en lado derecho: {str(e)}")
-        lambda_right = None
-    
-    # Graficar resultados
-    lambdas = np.linspace(a, b, 1000)
-    intensities = np.array([planck_law(l, T) for l in lambdas])
-    
-    plt.figure(figsize=(12, 6))
-    plt.plot(lambdas * 1e9, intensities, label=f'Curva de Planck (T = {T} K)')
-    plt.axhline(y=I0, color='r', linestyle='--', label=f'Intensidad objetivo ({I0_percent:.0%} del máximo)')
-    
-    if lambda_left:
-        plt.axvline(x=lambda_left*1e9, color='g', linestyle=':', label=f'λ izquierda = {lambda_left*1e9:.1f} nm')
-    if lambda_right:
-        plt.axvline(x=lambda_right*1e9, color='b', linestyle=':', label=f'λ derecha = {lambda_right*1e9:.1f} nm')
-    
-    plt.title(f"Solución para I0 = {I0_percent:.0%} de la intensidad máxima")
-    plt.xlabel("Longitud de onda (nm)")
-    plt.ylabel("Intensidad espectral (W·sr⁻¹·m⁻³)")
-    plt.grid(True)
-    plt.legend()
-    plt.show()
+# Calcular intensidad de Planck
+intensities = planck(wavelengths, T)
+
+# Longitud de onda del máximo teórico (Ley de Wien)
+lambda_max_theoretical = 2.898e-3 / T  # metros
+print(f"Longitud de onda pico (teórica): {lambda_max_theoretical*1e9:.2f} nm")
+
+# Longitud de onda del pico (calculada)
+idx_max = np.argmax(intensities)
+lambda_max = wavelengths[idx_max]
+I_max = intensities[idx_max]
+print(f"Intensidad máxima: {I_max:.3e} W·sr⁻¹·m⁻³")
+print(f"Longitud de onda pico (calculada): {lambda_max*1e9:.2f} nm")
+
+# Buscar longitudes de onda para una intensidad I0
+I0 = 0.5 * I_max
+print(f"\nBuscando λ para I0 = 50% del máximo ({I0:.3e} W·sr⁻¹·m⁻³)")
+
+# Valores iniciales a la izquierda y derecha del pico
+initial_left = lambda_max * 0.9
+initial_right = lambda_max * 1.1
+
+# Lado izquierdo del pico
+result_left = kung_traub(f, initial_left, 1e-8, 100, T, I0)
+I_left = planck(result_left['xk'], T)
+print(f"\nλ (antes del pico): {result_left['xk']*1e9:.2f} nm → I = {I_left:.3e}")
+print(f"V.I. = {result_left['lambda0']*1e9:.2f} nm")
+print(f"xk = {result_left['xk']*1e9:.5f} nm")
+print(f"error ek = {result_left['error']:.2e}")
+print(f"iteraciones = {result_left['iteraciones']}")
+print(f"tiempo de ejecución = {result_left['tiempo']:.4f} s")
+
+# Lado derecho del pico
+result_right = kung_traub(f, initial_right, 1e-8, 100, T, I0)
+I_right = planck(result_right['xk'], T)
+print(f"\nλ (después del pico): {result_right['xk']*1e9:.2f} nm → I = {I_right:.3e}")
+print(f"V.I. = {result_right['lambda0']*1e9:.2f} nm")
+print(f"xk = {result_right['xk']*1e9:.5f} nm")
+print(f"error ek = {result_right['error']:.2e}")
+print(f"iteraciones = {result_right['iteraciones']}")
+print(f"tiempo de ejecución = {result_right['tiempo']:.4f} s")
+
+# Gráfico de intensidad vs longitud de onda con puntos clave
+plt.figure(figsize=(10, 6))
+plt.plot(wavelengths * 1e9, intensities, label=f'Planck T={T}K', color='blue')
+
+# Marcar el pico
+plt.plot(lambda_max * 1e9, I_max, 'ro', label='Pico (máx)')
+
+# Marcar los puntos donde I = 50% I_max
+plt.plot(result_left['xk'] * 1e9, I_left, 'go', label='λ izquierda (50%)')
+plt.plot(result_right['xk'] * 1e9, I_right, 'mo', label='λ derecha (50%)')
+
+# Líneas de referencia
+plt.axhline(I0, color='gray', linestyle='--', linewidth=1, label='50% I_max')
+plt.axvline(result_left['xk'] * 1e9, color='green', linestyle='--', linewidth=1)
+plt.axvline(result_right['xk'] * 1e9, color='purple', linestyle='--', linewidth=1)
+plt.axvline(lambda_max * 1e9, color='red', linestyle='--', linewidth=1)
+
+# Detalles de la gráfica
+plt.title(f"Distribución espectral de la radiación a {T} K")
+plt.xlabel("Longitud de onda (nm)")
+plt.ylabel("Intensidad espectral (W·sr⁻¹·m⁻³)")
+plt.grid(True)
+plt.legend()
+plt.tight_layout()
+plt.show()
+
