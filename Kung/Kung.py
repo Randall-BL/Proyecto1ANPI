@@ -8,45 +8,80 @@ c = 299792458           # velocidad de la luz [m/s]
 k = 1.380649e-23        # constante de Boltzmann [J/K]
 
 # Ley de Planck
+# Función que implementa la Ley de Planck para una longitud de onda y temperatura dadas.
+# Devuelve la intensidad espectral de radiación (W·sr⁻¹·m⁻³)
 def planck(wavelength, T):
     a = 2.0*h*c**2
     b = h*c / (wavelength*k*T)
-    intensity = a / (wavelength**5 * (np.exp(b) - 1.0))
+    intensity = a / (wavelength**5 * (np.exp(b) - 1.0)) # Fórmula de Planck
     return intensity
 
-# Derivada numérica de orden 1 y 2
+# Derivada numérica de primer orden usando diferencias centradas
 def first_derivative(f, x, h=1e-10, *args):
     return (f(x + h, *args) - f(x - h, *args)) / (2 * h)
 
+# Derivada numérica de segundo orden usando diferencias centradas
 def second_derivative(f, x, h=1e-10, *args):
     return (f(x + h, *args) - 2 * f(x, *args) + f(x - h, *args)) / (h**2)
 
-# Método de Kung-Traub
+# Implementación del método de Kung-Traub para encontrar raíces de una función f
 def kung_traub(f, x0, tol=1e-8, max_iter=100, *args):
-    x_values = [x0]
-    start_time = time.time()
+
+    """
+    Método de Kung-Traub para encontrar raíces de funciones no lineales.
+
+    Este método combina evaluaciones sucesivas de la función y sus derivadas 
+    para aproximarse rápidamente a una raíz. Utiliza una fórmula de tercer orden 
+    para mejorar la convergencia.
+
+    Parámetros:
+        f         : función objetivo, de la forma f(x, *args)
+        x0        : valor inicial (λ₀) para la búsqueda de la raíz
+        tol       : tolerancia aceptable para el error (criterio de parada)
+        max_iter  : número máximo de iteraciones permitidas
+        *args     : parámetros adicionales que requiere f (por ejemplo, temperatura T, intensidad I0)
+
+    Retorna:
+        dict con:
+            xk         : valor aproximado de la raíz (λ tal que f(λ) ≈ 0)
+            error      : error en la última iteración (máximo entre |f(xk)| y |xk - x_{k-1}|)
+            iteraciones: número de iteraciones realizadas
+            tiempo     : tiempo de ejecución total del método en segundos
+            lambda0    : valor inicial utilizado para iniciar el método
+    """
+    x_values = [x0] # Lista para almacenar aproximaciones sucesivas
+    start_time = time.time() # Tiempo inicial para medir duración del método
 
     for k in range(1, max_iter + 1):
+        # Evaluaciones de la función y sus derivadas numéricas
         f_xk = f(x_values[-1], *args)
         f1_xk = first_derivative(f, x_values[-1], 1e-10, *args)
         f2_xk = second_derivative(f, x_values[-1], 1e-10, *args)
 
+        # Verificación de división por cero
         if f1_xk == 0:
             break
-
+        
+        # Paso 1: calcular z usando el método de Newton
         z = x_values[-1] - f_xk / f1_xk
         f_z = f(z, *args)
+
+        # Paso 2: calcular y usando la fórmula de mejora sobre z
         y = x_values[-1] - (f_xk**2) / (f1_xk * (f_xk - 2*f_z))
         f_y = f(y, *args)
         denominator = f1_xk * (f_xk - 2*f_z)
 
         if denominator == 0:
             break
-
+                
+        # Paso 3: aplicar la fórmula de Kung-Traub para obtener la siguiente aproximación
         x_next = x_values[-1] - (f_xk**3) / (denominator * (f_xk - 2*f_y))
         x_values.append(x_next)
 
+        # Cálculo del error como el máximo entre |f(xk)| y |xk - x_{k-1}|
         error = max(abs(f(x_next, *args)), abs(x_next - x_values[-2]))
+                
+        # Criterio de parada: si el error es menor que la tolerancia
         if error < tol:
             end_time = time.time()
             return {
@@ -56,7 +91,8 @@ def kung_traub(f, x0, tol=1e-8, max_iter=100, *args):
                 'tiempo': end_time - start_time,
                 'lambda0': x0
             }
-
+        
+    # Si no se alcanzó la tolerancia en las iteraciones permitidas
     end_time = time.time()
     return {
         'xk': x_values[-1],
